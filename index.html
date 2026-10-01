@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>iPad Wetterstation & Diashow</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #000; color: #fff; }
+    
+    /* Hintergründe / Diashow */
+    .bg-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 1; }
+    .bg-slide.active { opacity: 1; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: 2; }
+
+    /* Dashboard Layout */
+    .dashboard { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; display: flex; flex-direction: column; justify-content: space-between; padding: 25px; }
+    
+    /* Header: Uhr und Ort */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+    .time-box { text-align: left; }
+    .clock { font-size: 5.5rem; font-weight: 300; line-height: 1; }
+    .date { font-size: 1.5rem; font-weight: 400; opacity: 0.9; margin-top: 5px; }
+    .location { font-size: 2.2rem; font-weight: 600; text-align: right; }
+
+    /* Top Controls */
+    .top-controls { position: absolute; top: 25px; right: 25px; z-index: 10; display: flex; gap: 10px; align-items: center; }
+
+    .btn { background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 10px 18px; border-radius: 20px; font-size: 1rem; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .btn:hover { background: rgba(255,255,255,0.4); }
+    .btn-icon { padding: 10px; border-radius: 50%; font-size: 1.2rem; line-height: 1; width: 42px; height: 42px; }
+
+    /* Wetterbereich */
+    .weather-container { background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.15); }
+    
+    .current-weather { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding-bottom: 15px; margin-bottom: 15px; }
+    .current-temp { font-size: 3.8rem; font-weight: 300; }
+    .current-details { text-align: right; font-size: 1.1rem; opacity: 0.9; }
+
+    /* 7-Tage-Vorhersage Grid */
+    .forecast { display: flex; justify-content: space-between; text-align: center; }
+    .forecast-day { flex: 1; padding: 0 5px; }
+    .forecast-day .day-name { font-size: 1rem; font-weight: 600; margin-bottom: 5px; opacity: 0.8; }
+    .forecast-day .day-icon { font-size: 1.6rem; margin: 5px 0; }
+    .forecast-day .day-temp { font-size: 1.1rem; font-weight: 500; }
+    .forecast-day .day-min { font-size: 0.9rem; opacity: 0.6; }
+
+    /* Settings Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    
+    .modal { background: #1c1c1e; border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 25px; width: 90%; max-width: 400px; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+    .modal h2 { font-size: 1.4rem; margin-bottom: 20px; text-align: center; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+    
+    .setting-group { margin-bottom: 20px; }
+    .setting-group label { display: block; font-size: 1rem; margin-bottom: 10px; opacity: 0.9; }
+    
+    .radio-group { display: flex; gap: 10px; justify-content: space-between; }
+    .radio-btn { flex: 1; text-align: center; padding: 12px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; cursor: pointer; transition: all 0.2s; font-size: 1rem; }
+    .radio-btn.active { background: #0a84ff; border-color: #0a84ff; font-weight: 600; }
+    
+    .close-btn { width: 100%; padding: 12px; background: rgba(255,255,255,0.15); border: none; border-radius: 12px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 10px; }
+    .close-btn:hover { background: rgba(255,255,255,0.25); }
+  </style>
+</head>
+<body>
+
+  <div id="bg1" class="bg-slide active"></div>
+  <div id="bg2" class="bg-slide"></div>
+  <div class="overlay"></div>
+
+  <!-- Top Controls -->
+  <div class="top-controls">
+    <label class="btn" id="uploadBtn">
+      📷 Fotos wählen
+      <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+    </label>
+    <button class="btn btn-icon" id="settingsBtn" title="Einstellungen">⚙️</button>
+  </div>
+
+  <div class="dashboard">
+    <div class="header">
+      <div class="time-box">
+        <div class="clock" id="clock">00:00</div>
+        <div class="date" id="date">Lädt...</div>
+      </div>
+      <div class="location">Chemnitz</div>
+    </div>
+
+    <div class="weather-container">
+      <div class="current-weather">
+        <div>
+          <span class="current-temp" id="currentTemp">--°C</span>
+          <span id="currentIcon" style="font-size: 2.5rem; margin-left: 10px;">☀️</span>
+        </div>
+        <div class="current-details">
+          <div id="weatherDesc">Wetter wird geladen...</div>
+          <div id="windSpeed">Wind: -- km/h</div>
+        </div>
+      </div>
+
+      <div class="forecast" id="forecast">
+        <!-- 7-Tage-Vorhersage wird dynamisch eingefügt -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h2>Einstellungen</h2>
+      
+      <div class="setting-group">
+        <label>Foto-Wechsel Intervall:</label>
+        <div class="radio-group">
+          <div class="radio-btn active" data-seconds="10">10 Sek.</div>
+          <div class="radio-btn" data-seconds="30">30 Sek.</div>
+          <div class="radio-btn" data-seconds="60">60 Sek.</div>
+        </div>
+      </div>
+
+      <button class="close-btn" id="closeModalBtn">Fertig</button>
+    </div>
+  </div>
+
+  <script>
+    // --- UHRZEIT & DATUM ---
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${hours}:${minutes}`;
+
+      const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+      document.getElementById('date').textContent = now.toLocaleDateString('de-DE', options);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- WETTER FÜR CHEMNITZ (Open-Meteo API) ---
+    const lat = 50.8333; // Chemnitz
+    const lon = 12.9167;
+
+    const weatherIcons = {
+      0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+      45: '🌫️', 48: '🌫️',
+      51: '🌧', 53: '🌧️', 55: '🌧️',
+      61: '🌧️', 63: '🌧️', 65: '🌧️',
+      71: '❄️', 73: '❄️', 75: '❄️',
+      80: '🌦️', 81: '🌦️', 82: '🌧️',
+      95: '🌩️'
+    };
+
+    function fetchWeather() {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin`;
+
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          // Aktuelles Wetter
+          const current = data.current_weather;
+          document.getElementById('currentTemp').textContent = `${Math.round(current.temperature)}°C`;
+          document.getElementById('windSpeed').textContent = `Wind: ${Math.round(current.windspeed)} km/h`;
+          document.getElementById('currentIcon').textContent = weatherIcons[current.weathercode] || '☀️';
+          document.getElementById('weatherDesc').textContent = getWeatherDescription(current.weathercode);
+
+          // 7-Tage Vorhersage
+          const forecastEl = document.getElementById('forecast');
+          forecastEl.innerHTML = '';
+          const daily = data.daily;
+
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(daily.time[i]);
+            const dayName = i === 0 ? 'Heute' : date.toLocaleDateString('de-DE', { weekday: 'short' });
+            const icon = weatherIcons[daily.weathercode[i]] || '☀️';
+            const maxTemp = Math.round(daily.temperature_2m_max[i]);
+            const minTemp = Math.round(daily.temperature_2m_min[i]);
+
+            const dayHtml = `
+              <div class="forecast-day">
+                <div class="day-name">${dayName}</div>
+                <div class="day-icon">${icon}</div>
+                <div class="day-temp">${maxTemp}°C</div>
+                <div class="day-min">${minTemp}°C</div>
+              </div>
+            `;
+            forecastEl.innerHTML += dayHtml;
+          }
+        })
+        .catch(err => console.error("Wetter konnte nicht geladen werden:", err));
+    }
+
+    function getWeatherDescription(code) {
+      if (code === 0) return 'Klarer Himmel';
+      if (code <= 3) return 'Leicht bewölkt';
+      if (code <= 48) return 'Nebel';
+      if (code <= 65) return 'Regen';
+      if (code <= 75) return 'Schnee';
+      if (code <= 82) return 'Regenschauer';
+      return 'Gewitter';
+    }
+
+    fetchWeather();
+    setInterval(fetchWeather, 1800000); // Alle 30 Minuten
+
+    // --- FOTO DIASHOW (LOKAL VOM IPAD) ---
+    let imageURLs = [];
+    let currentIndex = 0;
+    let activeBg = 1;
+    let slideInterval = null;
+    let currentSeconds = 10;
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const files = e.target.files;
+      if (files.length === 0) return;
+
+      imageURLs = Array.from(files).map(file => URL.createObjectURL(file));
+      currentIndex = 0;
+      
+      showNextImage();
+      startSlideshow();
+      
+      document.getElementById('uploadBtn').style.display = 'none';
+    });
+
+    function startSlideshow() {
+      if (slideInterval) clearInterval(slideInterval);
+      if (imageURLs.length > 0) {
+        slideInterval = setInterval(showNextImage, currentSeconds * 1000);
+      }
+    }
+
+    function showNextImage() {
+      if (imageURLs.length === 0) return;
+
+      const nextImg = imageURLs[currentIndex];
+      const bg1 = document.getElementById('bg1');
+      const bg2 = document.getElementById('bg2');
+
+      if (activeBg === 1) {
+        bg2.style.backgroundImage = `url('${nextImg}')`;
+        bg2.classList.add('active');
+        bg1.classList.remove('active');
+        activeBg = 2;
+      } else {
+        bg1.style.backgroundImage = `url('${nextImg}')`;
+        bg1.classList.add('active');
+        bg2.classList.remove('active');
+        activeBg = 1;
+      }
+
+      currentIndex = (currentIndex + 1) % imageURLs.length;
+    }
+
+    // --- SETTINGS MODAL HANDLERS ---
+    const modalOverlay = document.getElementById('modalOverlay');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const radioBtns = document.querySelectorAll('.radio-btn');
+
+    settingsBtn.addEventListener('click', () => {
+      modalOverlay.classList.add('active');
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      modalOverlay.classList.remove('active');
+    });
+
+    radioBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        radioBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSeconds = parseInt(btn.getAttribute('data-seconds'), 10);
+        startSlideshow();
+      });
+    });
+  </script>
+</body>
+</html>
