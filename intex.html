@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>iPad Wetterstation & Diashow (DWD)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #000; color: #fff; }
+    
+    /* Hintergründe / Diashow */
+    .bg-slide { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.5s ease-in-out; z-index: 1; }
+    .bg-slide.active { opacity: 1; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.35); z-index: 2; }
+
+    /* Dashboard Layout */
+    .dashboard { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; display: flex; flex-direction: column; justify-content: space-between; padding: 35px 25px 20px 25px; }
+    
+    /* Header: Uhrzeit */
+    .header { display: flex; justify-content: flex-start; align-items: flex-start; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+    .time-box { text-align: left; }
+    .clock { font-size: 5rem; font-weight: 300; line-height: 1; }
+    .date { font-size: 1.4rem; font-weight: 400; opacity: 0.9; margin-top: 5px; }
+
+    /* Top Controls mit Sanftem Ausblenden */
+    .top-controls { 
+      position: absolute; 
+      top: 35px; 
+      right: 25px; 
+      z-index: 10; 
+      display: flex; 
+      gap: 10px; 
+      align-items: center; 
+      opacity: 1; 
+      transition: opacity 0.5s ease;
+    }
+    .top-controls.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .btn { background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 10px 18px; border-radius: 20px; font-size: 1rem; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+    .btn:hover { background: rgba(255,255,255,0.4); }
+    .btn-icon { padding: 10px; border-radius: 50%; font-size: 1.2rem; line-height: 1; width: 42px; height: 42px; }
+
+    /* Wetterbereich */
+    .weather-container { 
+      background: transparent; 
+      border-radius: 20px; 
+      padding: 10px; 
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+    }
+    
+    .current-weather { 
+      display: flex; 
+      flex-direction: column; 
+      align-items: flex-start; 
+      margin-bottom: 15px; 
+    }
+    
+    /* Beschreibung & Haupttemperatur */
+    .weather-desc-top { font-size: 1.25rem; font-weight: 500; opacity: 0.95; margin-bottom: 2px; }
+    .current-temp-box { display: flex; align-items: center; }
+    .current-temp { font-size: 3.5rem; font-weight: 300; line-height: 1; }
+    
+    /* MITTIG NEBENEINANDER: Feuchtigkeit, Niederschlag, Wind */
+    .current-details-center { 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      gap: 25px; 
+      width: 100%; 
+      font-size: 1.1rem; 
+      font-weight: 500;
+      opacity: 0.95; 
+      padding: 10px 0 15px 0; 
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+      margin-bottom: 15px;
+    }
+
+    /* VERGRÖSSERTE VORHERSAGE */
+    .forecast { display: flex; justify-content: space-between; text-align: center; }
+    .forecast-day { flex: 1; padding: 0 4px; }
+    .forecast-day .day-name { font-size: 1.35rem; font-weight: 600; margin-bottom: 6px; opacity: 0.95; }
+    .forecast-day .day-icon { font-size: 2.8rem; margin: 6px 0; line-height: 1; }
+    .forecast-day .day-temp { font-size: 1.5rem; font-weight: 600; }
+    .forecast-day .day-min { font-size: 1.15rem; opacity: 0.8; margin-top: 2px; }
+    .forecast-day .day-rain { font-size: 1rem; color: #72c6ff; margin-top: 6px; font-weight: 600; }
+
+    /* Settings Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 100; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    
+    .modal { background: #1c1c1e; border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 25px; width: 90%; max-width: 400px; color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+    .modal h2 { font-size: 1.4rem; margin-bottom: 20px; text-align: center; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+    
+    .setting-group { margin-bottom: 20px; }
+    .setting-group label { display: block; font-size: 1rem; margin-bottom: 10px; opacity: 0.9; }
+    
+    .radio-group { display: flex; gap: 10px; justify-content: space-between; }
+    .radio-btn { flex: 1; text-align: center; padding: 12px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; cursor: pointer; transition: all 0.2s; font-size: 1rem; }
+    .radio-btn.active { background: #0a84ff; border-color: #0a84ff; font-weight: 600; }
+    
+    .close-btn { width: 100%; padding: 12px; background: rgba(255,255,255,0.15); border: none; border-radius: 12px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 10px; }
+    .close-btn:hover { background: rgba(255,255,255,0.25); }
+  </style>
+</head>
+<body>
+
+  <div id="bg1" class="bg-slide active"></div>
+  <div id="bg2" class="bg-slide"></div>
+  <div class="overlay"></div>
+
+  <!-- Top Controls -->
+  <div class="top-controls" id="topControls">
+    <label class="btn" id="uploadBtn">
+      📷 Fotos wählen
+      <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+    </label>
+    <button class="btn btn-icon" id="settingsBtn" title="Einstellungen">⚙️</button>
+  </div>
+
+  <div class="dashboard">
+    <div class="header">
+      <div class="time-box">
+        <div class="clock" id="clock">00:00</div>
+        <div class="date" id="date">Lädt...</div>
+      </div>
+    </div>
+
+    <div class="weather-container">
+      <div class="current-weather">
+        <div class="weather-desc-top" id="weatherDesc">DWD-Wetter wird geladen...</div>
+        <div class="current-temp-box">
+          <span class="current-temp" id="currentTemp">--°C</span>
+          <span id="currentIcon" style="font-size: 2.5rem; margin-left: 10px;">☀️</span>
+        </div>
+      </div>
+
+      <!-- MITTIGE DETAILS NEBENEINANDER -->
+      <div class="current-details-center">
+        <span id="humidity">💧 Feuchtigkeit: --%</span>
+        <span id="rain">🌧️ Regen: -- mm</span>
+        <span id="windSpeed">💨 Wind: -- km/h</span>
+      </div>
+
+      <div class="forecast" id="forecast"></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h2>Einstellungen</h2>
+      
+      <div class="setting-group">
+        <label>Foto-Wechsel Intervall:</label>
+        <div class="radio-group">
+          <div class="radio-btn active" data-seconds="10">10 Sek.</div>
+          <div class="radio-btn" data-seconds="30">30 Sek.</div>
+          <div class="radio-btn" data-seconds="60">60 Sek.</div>
+        </div>
+      </div>
+
+      <button class="close-btn" id="closeModalBtn">Fertig</button>
+    </div>
+  </div>
+
+  <script>
+    // --- UHRZEIT & DATUM ---
+    function updateClock() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${hours}:${minutes}`;
+
+      const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+      document.getElementById('date').textContent = now.toLocaleDateString('de-DE', options);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- DEUTSCHER WETTERDIENST (DWD / BrightSky API) ---
+    const lat = 50.8333; // Chemnitz Lat
+    const lon = 12.9167; // Chemnitz Lon
+
+    const weatherIcons = {
+      'clear-day': '☀️',
+      'clear-night': '🌙',
+      'partly-cloudy-day': '🌤',
+      'partly-cloudy-night': '☁️',
+      'cloudy': '☁️',
+      'fog': '🌫️',
+      'rain': '🌧️',
+      'sleet': '🌧️❄️',
+      'snow': '❄️',
+      'hail': '🌧️🌨️',
+      'thunderstorm': '🌩️'
+    };
+
+    const weatherTranslations = {
+      'clear-day': 'Klarer Himmel',
+      'clear-night': 'Klare Nacht',
+      'partly-cloudy-day': 'Teilweise bewölkt',
+      'partly-cloudy-night': 'Teilweise bewölkt',
+      'cloudy': 'Bewölkt',
+      'fog': 'Nebel',
+      'rain': 'Regen',
+      'sleet': 'Schneeregen',
+      'snow': 'Schneefall',
+      'hail': 'Hagel',
+      'thunderstorm': 'Gewitter'
+    };
+
+    function fetchDWDWeather() {
+      const today = new Date();
+      const startDate = today.toISOString().split('T')[0];
+      
+      const futureDate = new Date();
+      futureDate.setDate(today.getDate() + 7);
+      const endDate = futureDate.toISOString().split('T')[0];
+
+      fetch(`https://api.brightsky.dev/current_weather?lat=${lat}&lon=${lon}`)
+        .then(res => res.json())
+        .then(data => {
+          const w = data.weather;
+          document.getElementById('currentTemp').textContent = `${Math.round(w.temperature)}°C`;
+          document.getElementById('humidity').textContent = `💧 Feuchtigkeit: ${w.relative_humidity}%`;
+          document.getElementById('rain').textContent = `🌧️ Regen: ${w.precipitation} mm`;
+          document.getElementById('windSpeed').textContent = `💨 Wind: ${Math.round(w.wind_speed)} km/h`;
+          document.getElementById('currentIcon').textContent = weatherIcons[w.icon] || '☀️';
+          document.getElementById('weatherDesc').textContent = weatherTranslations[w.icon] || 'DWD Wetterdaten';
+        })
+        .catch(err => console.error("DWD Aktuell Fehler:", err));
+
+      fetch(`https://api.brightsky.dev/weather?lat=${lat}&lon=${lon}&date=${startDate}&last_date=${endDate}`)
+        .then(res => res.json())
+        .then(data => {
+          const dailyData = aggregateHourlyToDaily(data.weather);
+          renderForecast(dailyData);
+        })
+        .catch(err => console.error("DWD Vorhersage Fehler:", err));
+    }
+
+    function aggregateHourlyToDaily(hourlyList) {
+      const daysMap = {};
+
+      hourlyList.forEach(item => {
+        const dayKey = item.timestamp.split('T')[0];
+        if (!daysMap[dayKey]) {
+          daysMap[dayKey] = { temps: [], precipitation: 0, icons: [] };
+        }
+        if (item.temperature !== null) daysMap[dayKey].temps.push(item.temperature);
+        if (item.precipitation !== null) daysMap[dayKey].precipitation += item.precipitation;
+        if (item.icon) daysMap[dayKey].icons.push(item.icon);
+      });
+
+      return Object.keys(daysMap).slice(0, 7).map(dateStr => {
+        const dayInfo = daysMap[dateStr];
+        const maxTemp = dayInfo.temps.length ? Math.max(...dayInfo.temps) : 0;
+        const minTemp = dayInfo.temps.length ? Math.min(...dayInfo.temps) : 0;
+        
+        const iconCounts = {};
+        dayInfo.icons.forEach(ic => { iconCounts[ic] = (iconCounts[ic] || 0) + 1; });
+        const mainIcon = Object.keys(iconCounts).reduce((a, b) => iconCounts[a] > iconCounts[b] ? a : b, 'clear-day');
+
+        return {
+          date: dateStr,
+          maxTemp: Math.round(maxTemp),
+          minTemp: Math.round(minTemp),
+          rain: Math.round(dayInfo.precipitation * 10) / 10,
+          icon: mainIcon
+        };
+      });
+    }
+
+    function renderForecast(dailyList) {
+      const forecastEl = document.getElementById('forecast');
+      forecastEl.innerHTML = '';
+
+      dailyList.forEach((day, i) => {
+        const dateObj = new Date(day.date);
+        const dayName = i === 0 ? 'Heute' : dateObj.toLocaleDateString('de-DE', { weekday: 'short' });
+        const icon = weatherIcons[day.icon] || '☀️';
+
+        const dayHtml = `
+          <div class="forecast-day">
+            <div class="day-name">${dayName}</div>
+            <div class="day-icon">${icon}</div>
+            <div class="day-temp">${day.maxTemp}°C</div>
+            <div class="day-min">${day.minTemp}°C</div>
+            <div class="day-rain">💧 ${day.rain} mm</div>
+          </div>
+        `;
+        forecastEl.innerHTML += dayHtml;
+      });
+    }
+
+    fetchDWDWeather();
+    setInterval(fetchDWDWeather, 1800000);
+
+    // --- FOTO DIASHOW ---
+    let imageURLs = [];
+    let currentIndex = 0;
+    let activeBg = 1;
+    let slideInterval = null;
+    let currentSeconds = 10;
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const files = e.target.files;
+      if (files.length === 0) return;
+
+      imageURLs = Array.from(files).map(file => URL.createObjectURL(file));
+      currentIndex = 0;
+      
+      showNextImage();
+      startSlideshow();
+      
+      document.getElementById('uploadBtn').style.display = 'none';
+    });
+
+    function startSlideshow() {
+      if (slideInterval) clearInterval(slideInterval);
+      if (imageURLs.length > 0) {
+        slideInterval = setInterval(showNextImage, currentSeconds * 1000);
+      }
+    }
+
+    function showNextImage() {
+      if (imageURLs.length === 0) return;
+
+      const nextImg = imageURLs[currentIndex];
+      const bg1 = document.getElementById('bg1');
+      const bg2 = document.getElementById('bg2');
+
+      if (activeBg === 1) {
+        bg2.style.backgroundImage = `url('${nextImg}')`;
+        bg2.classList.add('active');
+        bg1.classList.remove('active');
+        activeBg = 2;
+      } else {
+        bg1.style.backgroundImage = `url('${nextImg}')`;
+        bg1.classList.add('active');
+        bg2.classList.remove('active');
+        activeBg = 1;
+      }
+
+      currentIndex = (currentIndex + 1) % imageURLs.length;
+    }
+
+    // --- AUTOMATISCHES AUSBLENDEN DES EINSTELLUNGS-SYMBOLS ---
+    const topControls = document.getElementById('topControls');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const radioBtns = document.querySelectorAll('.radio-btn');
+    let hideTimer = null;
+
+    function resetHideTimer() {
+      topControls.classList.remove('hidden');
+      
+      if (hideTimer) clearTimeout(hideTimer);
+      
+      if (!modalOverlay.classList.contains('active')) {
+        hideTimer = setTimeout(() => {
+          topControls.classList.add('hidden');
+        }, 10000);
+      }
+    }
+
+    window.addEventListener('touchstart', resetHideTimer);
+    window.addEventListener('click', resetHideTimer);
+
+    resetHideTimer();
+
+    // --- SETTINGS MODAL HANDLERS ---
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modalOverlay.classList.add('active');
+      if (hideTimer) clearTimeout(hideTimer);
+    });
+
+    closeModalBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modalOverlay.classList.remove('active');
+      resetHideTimer();
+    });
+
+    radioBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        radioBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSeconds = parseInt(btn.getAttribute('data-seconds'), 10);
+        startSlideshow();
+      });
+    });
+  </script>
+</body>
+</html>
