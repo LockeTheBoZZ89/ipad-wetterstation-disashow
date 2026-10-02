@@ -196,8 +196,8 @@
       'rain': '🌧️',
       'sleet': '🌧️❄️',
       'snow': '❄️',
-      'hail': '🌧️🌨️️',
-      'thunderstorm': '🌩️'
+      'hail': '🌧️🌨️',
+      'thunderstorm': '🌩️️'
     };
 
     const weatherTranslations = {
@@ -226,10 +226,19 @@
         .then(res => res.json())
         .then(data => {
           const w = data.weather;
-          document.getElementById('currentTemp').textContent = `${Math.round(w.temperature)}°C`;
-          document.getElementById('humidity').textContent = `💧 Feuchtigkeit: ${w.relative_humidity}%`;
-          document.getElementById('rain').textContent = `🌧️ Regen: ${w.precipitation} mm`;
-          document.getElementById('windSpeed').textContent = `💨 Wind: ${Math.round(w.wind_speed)} km/h`;
+          
+          // Fallback-Prüfungen für null/undefined Werte
+          const humidity = (w.relative_humidity !== null && w.relative_humidity !== undefined) ? w.relative_humidity : '--';
+          const rain = (w.precipitation !== null && w.precipitation !== undefined) ? w.precipitation : 0;
+          
+          // Windgeschwindigkeit aus verschiedenen möglichen Feldern auslesen
+          let rawWind = w.wind_speed !== null && w.wind_speed !== undefined ? w.wind_speed : w.wind_speed_10m;
+          const wind = (rawWind !== null && rawWind !== undefined) ? Math.round(rawWind) : 0;
+
+          document.getElementById('currentTemp').textContent = `${w.temperature !== null ? Math.round(w.temperature) : '--'}°C`;
+          document.getElementById('humidity').textContent = `💧 Feuchtigkeit: ${humidity}%`;
+          document.getElementById('rain').textContent = `🌧️ Regen: ${rain} mm`;
+          document.getElementById('windSpeed').textContent = `💨 Wind: ${wind} km/h`;
           document.getElementById('currentIcon').textContent = weatherIcons[w.icon] || '☀️';
           document.getElementById('weatherDesc').textContent = weatherTranslations[w.icon] || 'DWD Wetterdaten';
         })
